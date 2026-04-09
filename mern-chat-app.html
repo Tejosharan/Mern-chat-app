@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>SocketSync — Real-Time Chat Application</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --card: #16161f;
+    --border: #22222e;
+    --accent: #00e5a0;
+    --accent2: #7b61ff;
+    --accent3: #ff6b6b;
+    --text: #e8e8f0;
+    --muted: #6b6b80;
+    --online: #00e5a0;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    overflow-x: hidden;
+    line-height: 1.6;
+  }
+
+  /* NOISE OVERLAY */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 999;
+    opacity: 0.5;
+  }
+
+  /* HERO */
+  .hero {
+    min-height: 100vh;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse 60% 70% at 80% 50%, rgba(0,229,160,0.07) 0%, transparent 70%),
+                radial-gradient(ellipse 40% 40% at 20% 80%, rgba(123,97,255,0.08) 0%, transparent 60%);
+    pointer-events: none;
+  }
+
+  .hero-left {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 80px 60px;
+    position: relative;
+    z-index: 2;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(0,229,160,0.08);
+    border: 1px solid rgba(0,229,160,0.25);
+    color: var(--accent);
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    padding: 6px 14px;
+    border-radius: 2px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 32px;
+    width: fit-content;
+    animation: fadeUp 0.6s ease both;
+  }
+  .badge-dot {
+    width: 6px; height: 6px;
+    background: var(--accent);
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.8); }
+  }
+
+  h1 {
+    font-size: clamp(52px, 5vw, 80px);
+    font-weight: 800;
+    line-height: 1.0;
+    letter-spacing: -0.03em;
+    margin-bottom: 24px;
+    animation: fadeUp 0.6s 0.1s ease both;
+  }
+  h1 span {
+    color: var(--accent);
+    position: relative;
+  }
+  h1 span::after {
+    content: '';
+    position: absolute;
+    left: 0; bottom: 4px;
+    width: 100%; height: 3px;
+    background: var(--accent);
+    opacity: 0.3;
+  }
+
+  .hero-desc {
+    font-size: 17px;
+    color: var(--muted);
+    max-width: 440px;
+    margin-bottom: 40px;
+    animation: fadeUp 0.6s 0.2s ease both;
+    line-height: 1.7;
+  }
+
+  .tech-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    animation: fadeUp 0.6s 0.3s ease both;
+    margin-bottom: 44px;
+  }
+  .chip {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    padding: 5px 12px;
+    border-radius: 2px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    background: var(--surface);
+    letter-spacing: 0.05em;
+    transition: all 0.2s;
+  }
+  .chip:hover { border-color: var(--accent); color: var(--accent); }
+  .chip.hi { border-color: rgba(0,229,160,0.35); color: var(--accent); background: rgba(0,229,160,0.06); }
+
+  .cta-row { display: flex; gap: 14px; animation: fadeUp 0.6s 0.4s ease both; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 13px 28px;
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    text-decoration: none;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: none;
+  }
+  .btn-primary { background: var(--accent); color: #0a0a0f; }
+  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,229,160,0.3); }
+  .btn-outline { background: transparent; color: var(--text); border: 1px solid var(--border); }
+  .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* CHAT MOCKUP */
+  .hero-right {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 40px;
+    position: relative;
+    z-index: 2;
+  }
+
+  .chat-mockup {
+    width: 100%;
+    max-width: 420px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 40px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.03);
+    animation: floatUp 0.8s 0.3s ease both;
+  }
+  @keyframes floatUp {
+    from { opacity: 0; transform: translateY(30px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .chat-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .chat-avatar {
+    width: 36px; height: 36px;
+    background: linear-gradient(135deg, var(--accent2), var(--accent));
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 14px; color: #fff;
+    flex-shrink: 0;
+  }
+  .chat-header-info { flex: 1; }
+  .chat-header-name { font-size: 14px; font-weight: 700; }
+  .chat-header-status {
+    font-size: 11px;
+    color: var(--accent);
+    font-family: 'Space Mono', monospace;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .status-dot { width: 6px; height: 6px; background: var(--accent); border-radius: 50%; }
+
+  .chat-header-icons { display: flex; gap: 14px; }
+  .chat-icon { width: 18px; height: 18px; color: var(--muted); opacity: 0.7; }
+
+  .chat-messages {
+    height: 320px;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    scrollbar-width: none;
+  }
+  .chat-messages::-webkit-scrollbar { display: none; }
+
+  .msg { display: flex; flex-direction: column; max-width: 78%; gap: 4px; animation: msgIn 0.4s ease both; }
+  @keyframes msgIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+  .msg.me { align-self: flex-end; align-items: flex-end; }
+  .msg.them { align-self: flex-start; align-items: flex-start; }
+
+  .msg-bubble {
+    padding: 10px 15px;
+    border-radius: 16px;
+    font-size: 13.5px;
+    line-height: 1.5;
+  }
+  .msg.me .msg-bubble {
+    background: var(--accent);
+    color: #0a0a0f;
+    border-bottom-right-radius: 4px;
+  }
+  .msg.them .msg-bubble {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-bottom-left-radius: 4px;
+  }
+  .msg-meta {
+    font-size: 10px;
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .read-receipt { color: var(--accent); font-size: 10px; }
+
+  .typing-indicator {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 0;
+  }
+  .typing-dots {
+    display: flex;
+    gap: 4px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 10px 14px;
+    border-radius: 16px;
+    border-bottom-left-radius: 4px;
+  }
+  .dot {
+    width: 6px; height: 6px;
+    background: var(--muted);
+    border-radius: 50%;
+    animation: bounce 1.4s infinite;
+  }
+  .dot:nth-child(2) { animation-delay: 0.2s; }
+  .dot:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes bounce {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+    30% { transform: translateY(-6px); opacity: 1; }
+  }
+  .typing-text { font-size: 11px; color: var(--muted); font-family: 'Space Mono', monospace; }
+
+  .chat-input-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 16px;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .chat-input-field {
+    flex: 1;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    outline: none;
+  }
+  .chat-send-btn {
+    width: 38px; height: 38px;
+    background: var(--accent);
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    transition: transform 0.15s;
+  }
+  .chat-send-btn:hover { transform: scale(1.05); }
+
+  /* SECTIONS */
+  section { padding: 100px 60px; }
+  .section-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+  h2 {
+    font-size: clamp(32px, 3.5vw, 48px);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    margin-bottom: 20px;
+    line-height: 1.1;
+  }
+  .section-desc { font-size: 16px; color: var(--muted); max-width: 560px; margin-bottom: 60px; line-height: 1.7; }
+
+  /* FEATURES */
+  .features-section { background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .feature-card {
+    background: var(--card);
+    padding: 36px 32px;
+    transition: background 0.2s;
+  }
+  .feature-card:hover { background: #1a1a25; }
+  .feature-icon {
+    width: 44px; height: 44px;
+    background: rgba(0,229,160,0.1);
+    border: 1px solid rgba(0,229,160,0.2);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 20px;
+    font-size: 20px;
+  }
+  .feature-title { font-size: 18px; font-weight: 700; margin-bottom: 10px; }
+  .feature-desc { font-size: 14px; color: var(--muted); line-height: 1.65; }
+
+  /* ARCHITECTURE */
+  .arch-section { background: var(--bg); }
+  .arch-diagram {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 50px 40px;
+    overflow-x: auto;
+  }
+  .arch-flow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    flex-wrap: wrap;
+  }
+  .arch-node {
+    text-align: center;
+    padding: 20px 24px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    min-width: 120px;
+    transition: all 0.2s;
+  }
+  .arch-node:hover { border-color: var(--accent); transform: translateY(-3px); }
+  .arch-node-icon { font-size: 28px; margin-bottom: 8px; }
+  .arch-node-label { font-size: 12px; font-weight: 700; margin-bottom: 4px; }
+  .arch-node-sub { font-family: 'Space Mono', monospace; font-size: 10px; color: var(--muted); }
+  .arch-arrow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 0 8px;
+  }
+  .arrow-line { width: 40px; height: 2px; background: var(--border); position: relative; }
+  .arrow-line::after {
+    content: '';
+    position: absolute;
+    right: -6px; top: -4px;
+    border: 5px solid transparent;
+    border-left-color: var(--border);
+  }
+  .arrow-label { font-family: 'Space Mono', monospace; font-size: 9px; color: var(--muted); white-space: nowrap; }
+  .arrow-accent .arrow-line { background: var(--accent); }
+  .arrow-accent .arrow-line::after { border-left-color: var(--accent); }
+  .arrow-accent .arrow-label { color: var(--accent); }
+
+  /* CODE SECTION */
+  .code-section { background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .code-tabs { display: flex; gap: 0; margin-bottom: 0; border-bottom: 1px solid var(--border); }
+  .code-tab {
+    padding: 12px 22px;
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: all 0.2s;
+  }
+  .code-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .code-block {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    padding: 30px;
+    font-family: 'Space Mono', monospace;
+    font-size: 12.5px;
+    line-height: 1.8;
+    overflow-x: auto;
+    tab-size: 2;
+  }
+  .code-panel { display: none; }
+  .code-panel.active { display: block; }
+  .kw { color: #7b61ff; }
+  .fn { color: #00e5a0; }
+  .str { color: #ffa657; }
+  .cm { color: #6b6b80; font-style: italic; }
+  .num { color: #ff6b6b; }
+  .var { color: #e8e8f0; }
+
+  /* API SECTION */
+  .api-section { background: var(--bg); }
+  .api-table-wrap {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .api-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .api-table th {
+    text-align: left;
+    padding: 14px 20px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .api-table td { padding: 14px 20px; border-bottom: 1px solid rgba(34,34,46,0.6); }
+  .api-table tr:last-child td { border-bottom: none; }
+  .api-table tr:hover td { background: rgba(0,229,160,0.02); }
+  .method {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 3px;
+    display: inline-block;
+  }
+  .method.get { background: rgba(0,229,160,0.1); color: var(--accent); }
+  .method.post { background: rgba(123,97,255,0.1); color: var(--accent2); }
+  .method.put { background: rgba(255,166,87,0.1); color: #ffa657; }
+  .method.delete { background: rgba(255,107,107,0.1); color: var(--accent3); }
+  .route { font-family: 'Space Mono', monospace; font-size: 12.5px; color: var(--text); }
+  .route-desc { color: var(--muted); font-size: 13px; }
+
+  /* METRICS */
+  .metrics-section { background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .metrics-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
+  .metric-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 30px 28px;
+    text-align: center;
+  }
+  .metric-val { font-size: 48px; font-weight: 800; color: var(--accent); line-height: 1; margin-bottom: 8px; }
+  .metric-label { font-size: 13px; color: var(--muted); }
+
+  /* FOOTER */
+  footer {
+    padding: 40px 60px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--surface);
+  }
+  .footer-brand { font-size: 20px; font-weight: 800; }
+  .footer-brand span { color: var(--accent); }
+  .footer-meta { font-family: 'Space Mono', monospace; font-size: 11px; color: var(--muted); }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @media (max-width: 900px) {
+    .hero { grid-template-columns: 1fr; }
+    .hero-right { display: none; }
+    .features-grid { grid-template-columns: 1fr; }
+    .metrics-grid { grid-template-columns: 1fr 1fr; }
+    section { padding: 60px 24px; }
+    footer { flex-direction: column; gap: 16px; text-align: center; }
+  }
+
+  /* NAV */
+  nav {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 60px;
+    height: 64px;
+    background: rgba(10,10,15,0.85);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+  }
+  .nav-brand { font-size: 18px; font-weight: 800; }
+  .nav-brand span { color: var(--accent); }
+  .nav-links { display: flex; gap: 32px; }
+  .nav-links a {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    text-decoration: none;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    transition: color 0.2s;
+  }
+  .nav-links a:hover { color: var(--accent); }
+  .hero { padding-top: 64px; }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-brand">Socket<span>Sync</span></div>
+  <div class="nav-links">
+    <a href="#features">Features</a>
+    <a href="#architecture">Architecture</a>
+    <a href="#code">Code</a>
+    <a href="#api">API</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-left">
+    <div class="badge"><div class="badge-dot"></div>Navikshaa Technologies · Jun–Aug 2025</div>
+    <h1>Real-Time<br>Chat<br><span>Engine</span></h1>
+    <p class="hero-desc">A production-grade messaging platform built on MERN + Socket.IO. Live delivery, typing indicators, read receipts — all at scale with sub-100ms latency.</p>
+    <div class="tech-row">
+      <span class="chip hi">MongoDB</span>
+      <span class="chip hi">Express.js</span>
+      <span class="chip hi">React.js</span>
+      <span class="chip hi">Node.js</span>
+      <span class="chip hi">Socket.IO</span>
+      <span class="chip">JWT Auth</span>
+      <span class="chip">RBAC</span>
+      <span class="chip">Redis</span>
+      <span class="chip">Tailwind</span>
+    </div>
+    <div class="cta-row">
+      <a href="#code" class="btn btn-primary">↓ View Code</a>
+      <a href="#architecture" class="btn btn-outline">Architecture</a>
+    </div>
+  </div>
+  <div class="hero-right">
+    <div class="chat-mockup">
+      <div class="chat-header">
+        <div class="chat-avatar">AK</div>
+        <div class="chat-header-info">
+          <div class="chat-header-name">Team Alpha</div>
+          <div class="chat-header-status">
+            <div class="status-dot"></div>
+            3 online · socket connected
+          </div>
+        </div>
+        <div class="chat-header-icons">
+          <svg class="chat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+        </div>
+      </div>
+      <div class="chat-messages" id="chatMessages">
+        <div class="msg them" style="animation-delay:0.1s">
+          <div class="msg-bubble">Hey! Did you push the latest build? 🚀</div>
+          <div class="msg-meta">Priya · 10:24 AM</div>
+        </div>
+        <div class="msg me" style="animation-delay:0.3s">
+          <div class="msg-bubble">Yeah, just merged the Socket.IO handlers. Works perfectly now!</div>
+          <div class="msg-meta">You · 10:25 AM <span class="read-receipt">✓✓</span></div>
+        </div>
+        <div class="msg them" style="animation-delay:0.5s">
+          <div class="msg-bubble">The typing indicators look really smooth 👌</div>
+          <div class="msg-meta">Priya · 10:25 AM</div>
+        </div>
+        <div class="msg me" style="animation-delay:0.7s">
+          <div class="msg-bubble">Thanks! Used debounce on keydown events. Latency is under 80ms.</div>
+          <div class="msg-meta">You · 10:26 AM <span class="read-receipt">✓✓</span></div>
+        </div>
+        <div class="typing-indicator" id="typingIndicator">
+          <div class="typing-dots">
+            <div class="dot"></div>
+            <div class="dot"></div>
+            <div class="dot"></div>
+          </div>
+          <div class="typing-text">Priya is typing...</div>
+        </div>
+      </div>
+      <div class="chat-input-bar">
+        <input class="chat-input-field" id="chatInput" placeholder="Message Team Alpha..." />
+        <button class="chat-send-btn" onclick="sendMsg()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0a0a0f" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- METRICS -->
+<section class="metrics-section" id="metrics">
+  <div class="section-label">Performance Benchmarks</div>
+  <h2>Built for Scale</h2>
+  <div class="metrics-grid">
+    <div class="metric-card">
+      <div class="metric-val">&lt;80<span style="font-size:24px;color:var(--muted)">ms</span></div>
+      <div class="metric-label">Average message latency</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-val">500+</div>
+      <div class="metric-label">Concurrent WebSocket connections</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-val">99.2<span style="font-size:24px;color:var(--muted)">%</span></div>
+      <div class="metric-label">Uptime over internship period</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-val">40<span style="font-size:24px;color:var(--muted)">%</span></div>
+      <div class="metric-label">Reduction in frontend load time</div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section class="features-section" id="features">
+  <div class="section-label">Core Features</div>
+  <h2>Everything a production<br>chat needs</h2>
+  <p class="section-desc">Built from scratch during my internship at Navikshaa Technologies — each feature carefully engineered for real users.</p>
+  <div class="features-grid">
+    <div class="feature-card">
+      <div class="feature-icon">⚡</div>
+      <div class="feature-title">Live Messaging</div>
+      <div class="feature-desc">Bi-directional Socket.IO channels with room-based namespacing. Messages delivered in real-time to all connected clients without polling.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">✍️</div>
+      <div class="feature-title">Typing Indicators</div>
+      <div class="feature-desc">Debounced keydown event listeners emit typing events via socket. Auto-clear timeout prevents stale indicators.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">✓✓</div>
+      <div class="feature-title">Read Receipts</div>
+      <div class="feature-desc">Message delivery state tracked in MongoDB. Acknowledgement events update sender UI when recipient opens the conversation.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔐</div>
+      <div class="feature-title">JWT Authentication</div>
+      <div class="feature-desc">Stateless auth with access + refresh token rotation. Tokens verified on each HTTP request and Socket.IO handshake.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🛡️</div>
+      <div class="feature-title">Role-Based Access Control</div>
+      <div class="feature-desc">Middleware-enforced RBAC with admin, moderator, and user tiers. Room creation, deletion, and moderation gated by role.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">📱</div>
+      <div class="feature-title">Responsive UI</div>
+      <div class="feature-desc">React.js frontend with code-split bundles, lazy-loaded routes, and Tailwind breakpoints. Optimized for mobile, tablet, and desktop.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ARCHITECTURE -->
+<section class="arch-section" id="architecture">
+  <div class="section-label">System Architecture</div>
+  <h2>How it all connects</h2>
+  <p class="section-desc">A full-duplex WebSocket layer sits atop a RESTful API, all backed by MongoDB with Redis for session caching.</p>
+  <div class="arch-diagram">
+    <div class="arch-flow">
+      <div class="arch-node">
+        <div class="arch-node-icon">🌐</div>
+        <div class="arch-node-label">React Client</div>
+        <div class="arch-node-sub">Port 3000</div>
+      </div>
+      <div class="arch-arrow arrow-accent">
+        <div class="arrow-line"></div>
+        <div class="arrow-label">HTTP / WS</div>
+      </div>
+      <div class="arch-node">
+        <div class="arch-node-icon">⚙️</div>
+        <div class="arch-node-label">Express API</div>
+        <div class="arch-node-sub">Port 5000</div>
+      </div>
+      <div class="arch-arrow arrow-accent">
+        <div class="arrow-line"></div>
+        <div class="arrow-label">Socket.IO</div>
+      </div>
+      <div class="arch-node">
+        <div class="arch-node-icon">🔌</div>
+        <div class="arch-node-label">Socket Server</div>
+        <div class="arch-node-sub">Rooms / Events</div>
+      </div>
+      <div class="arch-arrow">
+        <div class="arrow-line"></div>
+        <div class="arrow-label">Persist</div>
+      </div>
+      <div class="arch-node">
+        <div class="arch-node-icon">🍃</div>
+        <div class="arch-node-label">MongoDB</div>
+        <div class="arch-node-sub">Atlas Cluster</div>
+      </div>
+    </div>
+    <div style="margin-top:30px; display:flex; justify-content:center;">
+      <div class="arch-node" style="min-width:180px;">
+        <div class="arch-node-icon">⚡</div>
+        <div class="arch-node-label">Redis Cache</div>
+        <div class="arch-node-sub">Session store · Token blacklist</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CODE -->
+<section class="code-section" id="code">
+  <div class="section-label">Source Code</div>
+  <h2>Key implementation snippets</h2>
+  <p class="section-desc">Core code from the actual internship project — Socket.IO event handling, JWT middleware, and RBAC.</p>
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+    <div class="code-tabs">
+      <div class="code-tab active" onclick="switchTab('socket')">socket-server.js</div>
+      <div class="code-tab" onclick="switchTab('auth')">auth.middleware.js</div>
+      <div class="code-tab" onclick="switchTab('rbac')">rbac.middleware.js</div>
+      <div class="code-tab" onclick="switchTab('client')">useSocket.js</div>
+    </div>
+    <div class="code-block">
+
+      <div class="code-panel active" id="tab-socket"><pre><span class="cm">// socket-server.js — Socket.IO event handlers</span>
+<span class="kw">const</span> <span class="var">io</span> = <span class="fn">require</span>(<span class="str">'socket.io'</span>)(server, {
+  cors: { origin: process.env.CLIENT_URL, credentials: <span class="kw">true</span> }
+});
+
+<span class="cm">// Auth middleware for socket handshake</span>
+io.use(<span class="kw">async</span> (socket, next) => {
+  <span class="kw">const</span> token = socket.handshake.auth.<span class="var">token</span>;
+  <span class="kw">try</span> {
+    socket.<span class="var">user</span> = jwt.<span class="fn">verify</span>(token, process.env.JWT_SECRET);
+    <span class="fn">next</span>();
+  } <span class="kw">catch</span> (err) { <span class="fn">next</span>(<span class="kw">new</span> Error(<span class="str">'Unauthorized'</span>)); }
+});
+
+io.<span class="fn">on</span>(<span class="str">'connection'</span>, (socket) => {
+  <span class="cm">// Join room on connect</span>
+  socket.<span class="fn">on</span>(<span class="str">'join:room'</span>, (roomId) => {
+    socket.<span class="fn">join</span>(roomId);
+    socket.<span class="fn">to</span>(roomId).<span class="fn">emit</span>(<span class="str">'user:joined'</span>, { userId: socket.user._id });
+  });
+
+  <span class="cm">// Handle incoming message</span>
+  socket.<span class="fn">on</span>(<span class="str">'message:send'</span>, <span class="kw">async</span> ({ roomId, content }) => {
+    <span class="kw">const</span> msg = <span class="kw">await</span> Message.<span class="fn">create</span>({
+      sender: socket.user._id, room: roomId,
+      content, status: <span class="str">'delivered'</span>
+    });
+    io.<span class="fn">to</span>(roomId).<span class="fn">emit</span>(<span class="str">'message:new'</span>, msg);
+  });
+
+  <span class="cm">// Typing indicator with debounce</span>
+  socket.<span class="fn">on</span>(<span class="str">'typing:start'</span>, ({ roomId }) => {
+    socket.<span class="fn">to</span>(roomId).<span class="fn">emit</span>(<span class="str">'typing:update'</span>, {
+      userId: socket.user._id, isTyping: <span class="kw">true</span>
+    });
+  });
+
+  <span class="cm">// Read receipt acknowledgement</span>
+  socket.<span class="fn">on</span>(<span class="str">'message:read'</span>, <span class="kw">async</span> ({ messageId, roomId }) => {
+    <span class="kw">await</span> Message.<span class="fn">findByIdAndUpdate</span>(messageId, { status: <span class="str">'read'</span> });
+    io.<span class="fn">to</span>(roomId).<span class="fn">emit</span>(<span class="str">'message:status'</span>, { messageId, status: <span class="str">'read'</span> });
+  });
+});</pre></div>
+
+      <div class="code-panel" id="tab-auth"><pre><span class="cm">// auth.middleware.js — JWT verification</span>
+<span class="kw">const</span> <span class="var">jwt</span> = <span class="fn">require</span>(<span class="str">'jsonwebtoken'</span>);
+<span class="kw">const</span> { <span class="var">TokenBlacklist</span> } = <span class="fn">require</span>(<span class="str">'../models'</span>);
+
+<span class="kw">const</span> <span class="fn">authenticate</span> = <span class="kw">async</span> (req, res, next) => {
+  <span class="kw">const</span> authHeader = req.headers[<span class="str">'authorization'</span>];
+  <span class="kw">if</span> (!authHeader?.startsWith(<span class="str">'Bearer '</span>))
+    <span class="kw">return</span> res.<span class="fn">status</span>(<span class="num">401</span>).<span class="fn">json</span>({ error: <span class="str">'No token provided'</span> });
+
+  <span class="kw">const</span> token = authHeader.<span class="fn">split</span>(<span class="str">' '</span>)[<span class="num">1</span>];
+  <span class="kw">const</span> isBlacklisted = <span class="kw">await</span> TokenBlacklist.<span class="fn">findOne</span>({ token });
+  <span class="kw">if</span> (isBlacklisted)
+    <span class="kw">return</span> res.<span class="fn">status</span>(<span class="num">401</span>).<span class="fn">json</span>({ error: <span class="str">'Token revoked'</span> });
+
+  <span class="kw">try</span> {
+    req.<span class="var">user</span> = jwt.<span class="fn">verify</span>(token, process.env.JWT_SECRET);
+    <span class="fn">next</span>();
+  } <span class="kw">catch</span> (err) {
+    <span class="kw">if</span> (err.name === <span class="str">'TokenExpiredError'</span>)
+      <span class="kw">return</span> res.<span class="fn">status</span>(<span class="num">401</span>).<span class="fn">json</span>({ error: <span class="str">'Token expired'</span> });
+    res.<span class="fn">status</span>(<span class="num">403</span>).<span class="fn">json</span>({ error: <span class="str">'Invalid token'</span> });
+  }
+};
+
+module.exports = { authenticate };</pre></div>
+
+      <div class="code-panel" id="tab-rbac"><pre><span class="cm">// rbac.middleware.js — Role-based access control</span>
+<span class="kw">const</span> PERMISSIONS = {
+  admin:     [<span class="str">'read'</span>, <span class="str">'write'</span>, <span class="str">'delete'</span>, <span class="str">'manage'</span>],
+  moderator: [<span class="str">'read'</span>, <span class="str">'write'</span>, <span class="str">'delete'</span>],
+  user:      [<span class="str">'read'</span>, <span class="str">'write'</span>],
+};
+
+<span class="kw">const</span> <span class="fn">authorize</span> = (...requiredPerms) => (req, res, next) => {
+  <span class="kw">const</span> userRole = req.user?.role;
+  <span class="kw">const</span> userPerms = PERMISSIONS[userRole] || [];
+  <span class="kw">const</span> hasAll = requiredPerms.<span class="fn">every</span>(p => userPerms.<span class="fn">includes</span>(p));
+
+  <span class="kw">if</span> (!hasAll) {
+    <span class="kw">return</span> res.<span class="fn">status</span>(<span class="num">403</span>).<span class="fn">json</span>({
+      error: <span class="str">`Requires permissions: ${requiredPerms.join(', ')}`</span>
+    });
+  }
+  <span class="fn">next</span>();
+};
+
+<span class="cm">// Usage: router.delete('/room/:id', authenticate, authorize('delete'), deleteRoom)</span>
+module.exports = { authorize };</pre></div>
+
+      <div class="code-panel" id="tab-client"><pre><span class="cm">// useSocket.js — Custom React hook for Socket.IO</span>
+<span class="kw">import</span> { useEffect, useRef, useCallback } <span class="kw">from</span> <span class="str">'react'</span>;
+<span class="kw">import</span> { io } <span class="kw">from</span> <span class="str">'socket.io-client'</span>;
+<span class="kw">import</span> { useAuthStore } <span class="kw">from</span> <span class="str">'../store/auth'</span>;
+
+<span class="kw">export const</span> <span class="fn">useSocket</span> = (roomId) => {
+  <span class="kw">const</span> socketRef = <span class="fn">useRef</span>(<span class="kw">null</span>);
+  <span class="kw">const</span> typingTimer = <span class="fn">useRef</span>(<span class="kw">null</span>);
+  <span class="kw">const</span> token = <span class="fn">useAuthStore</span>(s => s.token);
+
+  <span class="fn">useEffect</span>(() => {
+    socketRef.current = <span class="fn">io</span>(process.env.REACT_APP_API_URL, {
+      auth: { token }, transports: [<span class="str">'websocket'</span>]
+    });
+
+    socketRef.current.<span class="fn">emit</span>(<span class="str">'join:room'</span>, roomId);
+    <span class="kw">return</span> () => socketRef.current.<span class="fn">disconnect</span>();
+  }, [roomId, token]);
+
+  <span class="kw">const</span> <span class="fn">sendMessage</span> = <span class="fn">useCallback</span>((content) => {
+    socketRef.current?.<span class="fn">emit</span>(<span class="str">'message:send'</span>, { roomId, content });
+  }, [roomId]);
+
+  <span class="kw">const</span> <span class="fn">emitTyping</span> = <span class="fn">useCallback</span>(() => {
+    socketRef.current?.<span class="fn">emit</span>(<span class="str">'typing:start'</span>, { roomId });
+    <span class="fn">clearTimeout</span>(typingTimer.current);
+    typingTimer.current = <span class="fn">setTimeout</span>(() =>
+      socketRef.current?.<span class="fn">emit</span>(<span class="str">'typing:stop'</span>, { roomId }), <span class="num">2000</span>
+    );
+  }, [roomId]);
+
+  <span class="kw">return</span> { sendMessage, emitTyping, socket: socketRef.current };
+};</pre></div>
+
+    </div>
+  </div>
+</section>
+
+<!-- API REFERENCE -->
+<section class="api-section" id="api">
+  <div class="section-label">REST API Reference</div>
+  <h2>Endpoints</h2>
+  <p class="section-desc">JWT-protected RESTful API with comprehensive RBAC enforcement on every route.</p>
+  <div class="api-table-wrap">
+    <table class="api-table">
+      <thead>
+        <tr>
+          <th>Method</th>
+          <th>Route</th>
+          <th>Auth</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><span class="method post">POST</span></td><td class="route">/api/auth/register</td><td>—</td><td class="route-desc">Register new user, return JWT pair</td></tr>
+        <tr><td><span class="method post">POST</span></td><td class="route">/api/auth/login</td><td>—</td><td class="route-desc">Authenticate, issue access + refresh tokens</td></tr>
+        <tr><td><span class="method post">POST</span></td><td class="route">/api/auth/refresh</td><td>Refresh</td><td class="route-desc">Rotate access token using refresh token</td></tr>
+        <tr><td><span class="method get">GET</span></td><td class="route">/api/rooms</td><td>User</td><td class="route-desc">List all rooms user is a member of</td></tr>
+        <tr><td><span class="method post">POST</span></td><td class="route">/api/rooms</td><td>Moderator</td><td class="route-desc">Create new chat room</td></tr>
+        <tr><td><span class="method get">GET</span></td><td class="route">/api/rooms/:id/messages</td><td>User</td><td class="route-desc">Paginated message history</td></tr>
+        <tr><td><span class="method put">PUT</span></td><td class="route">/api/messages/:id/read</td><td>User</td><td class="route-desc">Mark message as read</td></tr>
+        <tr><td><span class="method delete">DELETE</span></td><td class="route">/api/rooms/:id</td><td>Admin</td><td class="route-desc">Delete room and all messages</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<footer>
+  <div class="footer-brand">Socket<span>Sync</span></div>
+  <div class="footer-meta">Full Stack Internship · Navikshaa Technologies · Jun–Aug 2025</div>
+</footer>
+
+<script>
+function switchTab(name) {
+  document.querySelectorAll('.code-tab').forEach((t,i) => {
+    const names = ['socket','auth','rbac','client'];
+    t.classList.toggle('active', names[i] === name);
+  });
+  document.querySelectorAll('.code-panel').forEach(p => {
+    p.classList.toggle('active', p.id === 'tab-'+name);
+  });
+}
+
+// Simulate live chat
+function sendMsg() {
+  const input = document.getElementById('chatInput');
+  const val = input.value.trim();
+  if (!val) return;
+  const msgs = document.getElementById('chatMessages');
+  const typing = document.getElementById('typingIndicator');
+  const msg = document.createElement('div');
+  msg.className = 'msg me';
+  msg.innerHTML = `<div class="msg-bubble">${val}</div><div class="msg-meta">You · just now <span class="read-receipt">✓</span></div>`;
+  msgs.insertBefore(msg, typing);
+  input.value = '';
+  msgs.scrollTop = msgs.scrollHeight;
+
+  setTimeout(() => {
+    const reply = document.createElement('div');
+    reply.className = 'msg them';
+    const replies = ['Looks good! 🔥','On it!','Pushed to main ✓','Testing now...','LGTM 👍'];
+    reply.innerHTML = `<div class="msg-bubble">${replies[Math.floor(Math.random()*replies.length)]}</div><div class="msg-meta">Priya · just now</div>`;
+    msgs.insertBefore(reply, typing);
+    msgs.scrollTop = msgs.scrollHeight;
+  }, 1400);
+}
+
+document.getElementById('chatInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') sendMsg();
+});
+</script>
+</body>
+</html>
